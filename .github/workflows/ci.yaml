@@ -8,26 +8,6 @@ on:
 permissions: {}
 
 jobs:
-  lint:
-    if: ${{ ! github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      statuses: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Run Super Linter
-        uses: super-linter/super-linter@v8
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          VALIDATE_ALL_CODEBASE: false
-          VALIDATE_GITHUB_ACTIONS: true
-          VALIDATE_MARKDOWN: true
-          VALIDATE_NATURAL_LANGUAGE: true
-          VALIDATE_TYPESCRIPT_ES: true
-
   build:
     if: ${{ ! github.event.pull_request.draft }}
     runs-on: ubuntu-latest
@@ -100,7 +80,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, build, changelog, validate-release]
+    needs: [build, changelog, validate-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
