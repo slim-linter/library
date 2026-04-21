@@ -48,9 +48,9 @@ A default implementation emits everything as information.
 
 There will ultimately be linter-specific implementations.
 
-## Component: docker
+## Component: Docker
 
-The docker component executes a docker image with its environment and configuration against a mount
+The Docker component executes a Docker image with its environment and configuration against a mount
 of the project submitted to slim linter and captures the result.
 
 ### API — Properties
@@ -71,7 +71,7 @@ of the project submitted to slim linter and captures the result.
 
 A linter plugin encapsulates the configuration and execution of a version of a linter. All linter
 plugins implement the same interface with method `validate` that, given a configuration, file and
-docker instance, lints a subset of the linter project and reports the result.
+Docker instance, lints a subset of the linter project and reports the result.
 
 Slim linter will eventually provide as many implementations of this plugin interface as there are
 linters supported by super-linter.
@@ -94,8 +94,8 @@ The driver runs the plugins concurrently.
 ## Component: main
 
 The main component launches the driver, as required by the targeted execution environment. At the
-moment, there will be a main component to execute slim-linter as a GitHub action, and one to
-execute it as a unix command line tool.
+moment, there will be a main component to execute slim-linter as a GitHub Action, and one to
+execute it as a Unix command-line tool.
 
 ### API — Method
 
