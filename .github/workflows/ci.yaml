@@ -1,0 +1,132 @@
+---
+name: ci
+on:
+  push:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  lint:
+    if: ${{ ! github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Super Linter
+        uses: super-linter/super-linter@v8
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_GITHUB_ACTIONS: true
+          VALIDATE_MARKDOWN: true
+          VALIDATE_NATURAL_LANGUAGE: true
+          VALIDATE_TYPESCRIPT_ES: true
+
+  build:
+    if: ${{ ! github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://npm.pkg.github.com"
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  changelog:
+    if: ${{ ! github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the changelog
+        uses: denisa/clq-action@v1
+        id: clq-validate
+        with:
+          changeMap: .github/clq/changemap.json
+          mode: feature
+      - name: Echo changelog values
+        run: |
+          {
+            echo "# Changelog"
+            echo "## ${{ steps.clq-validate.outputs.name }}"
+            echo "${{ steps.clq-validate.outputs.tag }} -- ${{ steps.clq-validate.outputs.status }}"
+            echo "${{ steps.clq-validate.outputs.changes }}"
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+  is-target-branch-protected:
+    if: ${{ ! github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    outputs:
+      yes: ${{ steps.gh-query.outputs.validate_in_list }}
+    steps:
+      - id: gh-query
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          if gh ruleset check \
+              --repo "${GITHUB_REPOSITORY}" \
+              "${GITHUB_BASE_REF:-$GITHUB_REF_NAME}" \
+              | grep -q context:validate-release; then
+            echo "validate_in_list=true" >>"${GITHUB_OUTPUT}"
+          fi
+
+  validate-release:
+    if: ${{ needs.is-target-branch-protected.outputs.yes }}
+    needs: is-target-branch-protected
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract tag from the changelog
+        uses: denisa/clq-action@v1
+        id: clq-extract
+        with:
+          changeMap: .github/clq/changemap.json
+          mode: release
+
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, build, changelog, validate-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://npm.pkg.github.com"
+      - uses: denisa/clq-action@v1
+        id: clq-extract
+        with:
+          changeMap: .github/clq/changemap.json
+      - run: npm ci
+      - run: npm run build
+      - name: Set package version
+        run: npm version "${{ steps.clq-extract.outputs.tag }}" --no-git-tag-version
+      - name: Publish to GitHub Packages
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.clq-extract.outputs.tag }}
+          prerelease: ${{ steps.clq-extract.outputs.status == 'prereleased' }}
+          name: ${{ steps.clq-extract.outputs.name }}
+          body: ${{ steps.clq-extract.outputs.changes }}
